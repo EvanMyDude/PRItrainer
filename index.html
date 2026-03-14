@@ -256,12 +256,85 @@
     }
 
     /* ============================================================
+       COMPLETION CELEBRATION OVERLAY
+       ============================================================ */
+    .celebration-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    .celebration-overlay.visible {
+      display: flex;
+      opacity: 1;
+    }
+
+    .celebration-overlay.fading {
+      opacity: 0;
+    }
+
+    .celebration-card {
+      background: linear-gradient(135deg, #1a1d27 0%, #242836 100%);
+      border: 2px solid var(--success);
+      border-radius: 20px;
+      padding: 2.5rem 2rem;
+      text-align: center;
+      max-width: 360px;
+      width: 90%;
+      transform: scale(0.8);
+      transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 0 60px rgba(52, 211, 153, 0.3);
+    }
+
+    .celebration-overlay.visible .celebration-card {
+      transform: scale(1);
+    }
+
+    .celebration-icon {
+      font-size: 3.5rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .celebration-title {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--success);
+      margin-bottom: 0.5rem;
+    }
+
+    .celebration-subtitle {
+      font-size: 1rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* ============================================================
+       CONFETTI CANVAS
+       Positioned behind the celebration card, above everything else.
+       ============================================================ */
+    .confetti-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 210;
+      pointer-events: none;
+    }
+
+    /* ============================================================
        RESPONSIVE
        ============================================================ */
     @media (max-width: 400px) {
       body { padding: 0.5rem; }
       h1 { font-size: 1.1rem; }
       .cue-display { font-size: 1rem; min-height: 60px; }
+      .celebration-card { padding: 2rem 1.25rem; }
+      .celebration-title { font-size: 1.3rem; }
     }
   </style>
 </head>
@@ -316,6 +389,18 @@
            onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('beforeend', '<p style=\'color:#9ca3af;text-align:center;padding:2rem;\'>Place <code>movement1 visual.png</code> in the project root to see the visual reference.</p>')" />
     </div>
   </div>
+
+  <!-- Completion celebration overlay -->
+  <div class="celebration-overlay" id="celebrationOverlay">
+    <div class="celebration-card">
+      <span class="celebration-icon">&#10024;</span>
+      <div class="celebration-title">Movement Complete</div>
+      <div class="celebration-subtitle">You crushed all 4 sets. Your body thanks you.</div>
+    </div>
+  </div>
+
+  <!-- Confetti canvas renders on top of everything -->
+  <canvas class="confetti-canvas" id="confettiCanvas"></canvas>
 
 <script>
 /* ==============================================================
@@ -668,28 +753,155 @@ async function enterRest() {
   if (isPaused) return;
   updateRestUI(0);
 
-  /* Transition: REST -> BREATHE (next set) */
+  /* Transition: REST -> SETUP (replay) -> BREATHE (next set) */
   currentSet++;
   currentBreath = 0;
   updateSetUI();
   updateBreathUI();
 
-  if (!isPaused) enterBreathe();
+  /* Replay the full setup instructions so the user resets their position */
+  if (!isPaused) {
+    setStateUI(STATE.SETUP);
+    await speak(AUDIO_SCRIPTS.setup);
+    if (isPaused) return;
+    await timedPause(1500);
+    if (!isPaused) enterBreathe();
+  }
 }
 
 /**
  * COMPLETE STATE
- * Speaks the completion cue and resets the UI for a new session.
+ * Skips rest entirely after the final set.
+ * Launches confetti, shows the celebration overlay, speaks the completion cue.
+ * The overlay fades out after a few seconds and resets the UI.
  */
 async function enterComplete() {
   setStateUI(STATE.COMPLETE);
   updateRestUI(0);
+
+  /* Fire confetti and show the celebration card */
+  launchConfetti();
+  showCelebration();
+
   await speak(AUDIO_SCRIPTS.complete);
+  if (isPaused) return;
+
+  /* Hold the celebration for a moment so it sinks in */
+  await timedPause(4000);
+
+  /* Fade out the celebration overlay */
+  hideCelebration();
 
   setCue("Session finished. Press Start to go again.");
   startPauseBtn.textContent = "Start";
   isPaused = false;
   currentState = STATE.IDLE;
+}
+
+/* ==============================================================
+   CELEBRATION: OVERLAY SHOW AND HIDE
+   ============================================================== */
+const celebrationOverlay = document.getElementById("celebrationOverlay");
+
+function showCelebration() {
+  celebrationOverlay.classList.remove("fading");
+  celebrationOverlay.classList.add("visible");
+}
+
+function hideCelebration() {
+  celebrationOverlay.classList.add("fading");
+  /* Remove from DOM flow after the fade transition completes */
+  setTimeout(() => {
+    celebrationOverlay.classList.remove("visible", "fading");
+  }, 500);
+}
+
+/* ==============================================================
+   CONFETTI ENGINE
+   Lightweight canvas confetti. Spawns colorful particles that
+   fall with gravity and slight horizontal drift.
+   ============================================================== */
+const confettiCanvas = document.getElementById("confettiCanvas");
+const ctx = confettiCanvas.getContext("2d");
+let confettiParticles = [];
+let confettiAnimId = null;
+
+const CONFETTI_COLORS = [
+  "#34d399", "#4f8cff", "#fbbf24", "#f87171",
+  "#a78bfa", "#f472b6", "#38bdf8", "#fb923c"
+];
+
+function resizeConfettiCanvas() {
+  confettiCanvas.width = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+}
+
+/** Create a batch of confetti particles */
+function spawnConfetti(count) {
+  resizeConfettiCanvas();
+  for (let i = 0; i < count; i++) {
+    confettiParticles.push({
+      x: Math.random() * confettiCanvas.width,
+      y: Math.random() * confettiCanvas.height * -1,
+      w: Math.random() * 10 + 6,
+      h: Math.random() * 6 + 4,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      vx: (Math.random() - 0.5) * 3,
+      vy: Math.random() * 3 + 2,
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 10,
+      opacity: 1
+    });
+  }
+}
+
+/** Animate confetti particles on the canvas */
+function animateConfetti() {
+  ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+
+  confettiParticles.forEach((p) => {
+    p.x += p.vx;
+    p.vy += 0.04;
+    p.y += p.vy;
+    p.rotation += p.rotationSpeed;
+
+    /* Fade out particles near the bottom */
+    if (p.y > confettiCanvas.height * 0.75) {
+      p.opacity -= 0.015;
+    }
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate((p.rotation * Math.PI) / 180);
+    ctx.globalAlpha = Math.max(p.opacity, 0);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+    ctx.restore();
+  });
+
+  /* Remove dead particles */
+  confettiParticles = confettiParticles.filter((p) => p.opacity > 0);
+
+  if (confettiParticles.length > 0) {
+    confettiAnimId = requestAnimationFrame(animateConfetti);
+  } else {
+    ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    confettiAnimId = null;
+  }
+}
+
+/** Launch the full confetti sequence: two bursts for extra impact */
+function launchConfetti() {
+  if (confettiAnimId) {
+    cancelAnimationFrame(confettiAnimId);
+    confettiAnimId = null;
+  }
+  confettiParticles = [];
+  spawnConfetti(120);
+  confettiAnimId = requestAnimationFrame(animateConfetti);
+
+  /* Second burst after a short delay for a sustained effect */
+  setTimeout(() => spawnConfetti(80), 600);
 }
 
 /* ==============================================================
@@ -752,9 +964,11 @@ document.addEventListener("keydown", (e) => {
 
 /* ==============================================================
    INITIALIZATION
-   Check speech support on page load.
+   Check speech support on page load. Size confetti canvas.
    ============================================================== */
 checkSpeechSupport();
+resizeConfettiCanvas();
+window.addEventListener("resize", resizeConfettiCanvas);
 </script>
 
 </body>
