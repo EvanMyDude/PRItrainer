@@ -582,13 +582,12 @@ const EXERCISES = {
         label: null,
         breaths: 4,
         introScript: null,
-        breathIntro: (set, breath) =>
-          `Hold this position. Prepare for set ${set}, breath ${breath}.`,
-        inhaleScript: "In through your nose. Direct the air between your shoulder blades.",
-        inhaleText: "Inhale... send the air into the space between your shoulder blades to fill the back of your chest wall.",
-        exhaleScript: "And out through your mouth.",
+        breathIntro: (set, breath) => `Set ${set}, breath ${breath}.`,
+        inhaleScript: "In through your nose.",
+        inhaleText: "Inhale... send the air into the space between your shoulder blades.",
+        exhaleScript: "Out through your mouth.",
         exhaleText: "Exhale slowly through your mouth...",
-        breathDoneScript: "Breath complete. Maintain that hip position and keep pressing your forearms down."
+        breathDoneScript: "Good."
       }
     ]
   },
@@ -648,14 +647,14 @@ const EXERCISES = {
         breaths: 3,
         introScript:
           "Maintaining that position, reach forward and across the midline " +
-          "of your body with your right hand.",
-        breathIntro: (set, breath) =>
-          `Set ${set}. Right arm reach, breath ${breath}.`,
+          "of your body with your right hand. " +
+          "Each time you exhale, reach a little further with your right arm.",
+        breathIntro: (set, breath) => `Set ${set}, right arm, breath ${breath}.`,
         inhaleScript: "In through your nose.",
         inhaleText: "Inhale through your nose... hold the reach.",
-        exhaleScript: "And out through your mouth. Reach further with your right arm.",
+        exhaleScript: "Out through your mouth. Reach a little further with your right arm.",
         exhaleText: "Exhale... reach a little further with your right arm.",
-        breathDoneScript: "Good. Keep your left hip shifted back."
+        breathDoneScript: "Good. Keep that left hip back."
       },
       {
         /* Phase 2 — left arm. The reach deepens on the INHALE instead. */
@@ -663,14 +662,14 @@ const EXERCISES = {
         breaths: 3,
         introScript:
           "Now switch. Keep your left hip shifted back and reach forward " +
-          "across the midline of your body with your left hand.",
-        breathIntro: (set, breath) =>
-          `Set ${set}. Left arm reach, breath ${breath}.`,
-        inhaleScript: "In through your nose. Reach further with your left arm.",
-        inhaleText: "Inhale... reach further with your left arm and fill your left upper back.",
-        exhaleScript: "And out through your mouth. Maintain that reach.",
+          "across the midline of your body with your left hand. " +
+          "This time, each time you inhale, reach a little further with your left arm.",
+        breathIntro: (set, breath) => `Set ${set}, left arm, breath ${breath}.`,
+        inhaleScript: "In through your nose. Reach a little further with your left arm.",
+        inhaleText: "Inhale... reach a little further with your left arm and fill your left upper back.",
+        exhaleScript: "Out through your mouth. Maintain that reach.",
         exhaleText: "Exhale slowly... maintain the reach.",
-        breathDoneScript: "Good. Stay low and keep that left hip back."
+        breathDoneScript: "Good. Stay low."
       }
     ]
   }
@@ -932,8 +931,8 @@ async function enterSetup(token) {
   await speak(active().setupScript);
   if (aborted(token)) return;
 
-  /* Small pause before the first breath cycle */
-  await timedPause(1500);
+  /* Brief settle before the first breath cycle */
+  await timedPause(1000);
   if (aborted(token)) return;
 
   /* Transition: SETUP -> BREATHE */
@@ -953,11 +952,11 @@ async function enterPhase(token) {
   updatePhaseUI();
   updateBreathUI();
 
+  /* No gap after the positioning cue \u2014 the phase flows straight
+     into its first breath so the sequence does not stall. */
   const phase = activePhase();
   if (phase.introScript) {
     await speak(phase.introScript);
-    if (aborted(token)) return;
-    await timedPause(1000);
     if (aborted(token)) return;
   }
 
@@ -1009,15 +1008,12 @@ async function enterBreathe(token) {
 
   /* ---- Decide next transition ---- */
   if (currentBreath < phase.breaths) {
-    /* More breaths remain in this phase. Loop back. */
-    await timedPause(1000);
-    if (aborted(token)) return;
+    /* More breaths remain in this phase. Loop straight back \u2014 the
+       natural gap between utterances is pause enough. */
     enterBreathe(token);
   } else if (currentPhase < ex.phases.length - 1) {
     /* Phase done, but the set has another phase (the arm switch). */
     currentPhase++;
-    await timedPause(500);
-    if (aborted(token)) return;
     enterPhase(token);
   } else if (currentSet < ex.totalSets) {
     /* Whole set done. Transition: BREATHE -> REST */
