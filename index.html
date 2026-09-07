@@ -327,11 +327,102 @@
     }
 
     /* ============================================================
+       TAB BAR
+       Segmented control for switching between movements.
+       ============================================================ */
+    .tabs {
+      display: flex;
+      gap: 0.35rem;
+      background: var(--surface);
+      padding: 0.35rem;
+      border-radius: var(--radius);
+    }
+
+    .tab {
+      flex: 1;
+      padding: 0.7rem 0.4rem;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 700;
+      line-height: 1.3;
+      border-radius: calc(var(--radius) - 4px);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, transform 0.1s;
+    }
+
+    .tab:hover { color: var(--text); }
+    .tab:active { transform: scale(0.97); }
+
+    .tab.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .tab:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    /* ============================================================
+       TITLE BLOCK
+       ============================================================ */
+    .subtitle {
+      font-size: 0.85rem;
+      text-align: center;
+      color: var(--text-dim);
+      margin-top: -0.5rem;
+      letter-spacing: 0.02em;
+    }
+
+    /* Shared visibility helper */
+    .hidden { display: none !important; }
+
+    /* ============================================================
+       FOCUS NOTE
+       The key coaching correction, surfaced in the reference modal.
+       ============================================================ */
+    .focus-note {
+      background: var(--surface-alt);
+      border-left: 3px solid var(--warning);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      color: var(--text);
+    }
+
+    .focus-note h2 {
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--warning);
+      margin-bottom: 0.5rem;
+      padding-right: 2.5rem;
+    }
+
+    /* Fallback message when a movement image is missing */
+    .modal-fallback {
+      display: none;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 2rem;
+      font-size: 0.95rem;
+    }
+
+    .modal-fallback.visible { display: block; }
+
+    /* ============================================================
        RESPONSIVE
        ============================================================ */
     @media (max-width: 400px) {
       body { padding: 0.5rem; }
       h1 { font-size: 1.1rem; }
+      .tab { font-size: 0.78rem; padding: 0.6rem 0.3rem; }
       .cue-display { font-size: 1rem; min-height: 60px; }
       .celebration-card { padding: 2rem 1.25rem; }
       .celebration-title { font-size: 1.3rem; }
@@ -341,7 +432,11 @@
 <body>
 
   <div class="app">
+    <!-- Movement tabs -->
+    <div class="tabs" id="tabBar" role="tablist" aria-label="Choose a movement"></div>
+
     <h1 id="exerciseTitle">PRI Trainer</h1>
+    <p class="subtitle hidden" id="exerciseSubtitle"></p>
 
     <!-- Error banner for missing speech API -->
     <div class="error-banner" id="errorBanner"></div>
@@ -355,6 +450,10 @@
       <div class="status-row">
         <span class="status-label">Set</span>
         <span class="status-value" id="setDisplay">0 of 4</span>
+      </div>
+      <div class="status-row hidden" id="phaseRow">
+        <span class="status-label">Phase</span>
+        <span class="status-value" id="phaseDisplay">&mdash;</span>
       </div>
       <div class="status-row">
         <span class="status-label">Breath</span>
@@ -385,8 +484,12 @@
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal-content">
       <button class="modal-close" id="modalClose">&times;</button>
-      <img src="movement1 visual.png" alt="Standing Supported Passive Left AF IR demonstration"
-           onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('beforeend', '<p style=\'color:#9ca3af;text-align:center;padding:2rem;\'>Place <code>movement1 visual.png</code> in the project root to see the visual reference.</p>')" />
+      <div class="focus-note hidden" id="focusNote">
+        <h2>Your Focus</h2>
+        <p id="focusNoteText"></p>
+      </div>
+      <img id="refImage" alt="Exercise visual reference" />
+      <p class="modal-fallback" id="refFallback"></p>
     </div>
   </div>
 
@@ -395,7 +498,7 @@
     <div class="celebration-card">
       <span class="celebration-icon">&#10024;</span>
       <div class="celebration-title">Movement Complete</div>
-      <div class="celebration-subtitle">You crushed all 4 sets. Your body thanks you.</div>
+      <div class="celebration-subtitle" id="celebrationSubtitle"></div>
     </div>
   </div>
 
@@ -404,69 +507,195 @@
 
 <script>
 /* ==============================================================
-   PHASE 1: EXERCISE DATA MODULE
-   Extracted directly from the reference image.
-   Structured for easy extension with additional exercises.
+   EXERCISE LIBRARY
+   Each movement is a self-contained config object holding its copy,
+   timing, spoken scripts, and the PHASE STRUCTURE of a single set.
+   The state machine further down is generic: it reads only from the
+   currently active exercise, never from module-level constants. That
+   means adding a third movement is purely a matter of adding another
+   entry to this object plus one <button> in the tab bar.
    ============================================================== */
 const EXERCISES = {
-  standingSupportedPassiveLeftAFIR: {
+
+  /* ------------------------------------------------------------
+     MOVEMENT 1 — Standing Supported Passive Left AF IR
+     A flat movement: one phase of 4 identical breaths per set.
+     ------------------------------------------------------------ */
+  standingLeftAFIR: {
+    tabLabel: "Standing<br>Left AF IR",
     title: "Standing Supported Passive Left AF IR",
+    subtitle: "",
+    imageSrc: "movement1 visual.png",
+    imageAlt: "Standing Supported Passive Left AF IR demonstration",
+
+    /* The single most common way this movement goes wrong. Shown in the
+       reference modal; its two halves are also woven into the spoken
+       setup and inhale cues so they land in the moment. */
+    focusNote:
+      "When you place your forearms down, do not just collapse your chest toward the table. " +
+      "Instead, actively press your elbows and forearms into the surface to push your spine " +
+      "away from the table. This protracts your shoulder blades (moves them apart) and rounds " +
+      "your thoracic spine. As you inhale, direct all the air into the space between your " +
+      "shoulder blades to fill the back of your chest wall.",
+
+    totalSets: 4,
+    inhaleSeconds: 5,
+    exhaleSeconds: 7,
+    restSeconds: 30,
+
     steps: [
       "Stand facing a table, desk or a counter top.",
       "Place a 2-inch block underneath your left foot.",
       "Place your right foot on the ground ahead of your left.",
       "Round out your back and place both hands on the surface.",
       "Shift your left hip back so that your pant zipper is towards your left big toe. Slightly bend your left knee. You should feel a stretch in your left outer hip (buttock). The majority of your weight should be on your left leg, through your left mid-foot/heel.",
-      "Further round out your back by placing both forearms onto the surface.",
-      "Hold this position while you take 4-5 deep breaths, in through your nose and out through your mouth, filling the back of your chest wall with air upon inhalation.",
+      "Further round out your back by placing both forearms onto the surface. Do not collapse your chest toward the table \u2014 actively press your elbows and forearms into the surface to push your spine away from it. This protracts your shoulder blades and rounds your thoracic spine.",
+      "Hold this position while you take 4-5 deep breaths, in through your nose and out through your mouth, directing the air into the space between your shoulder blades to fill the back of your chest wall.",
       "Relax and repeat 4 more times."
     ],
-    /* Image asset path for the visual reference modal */
-    imageSrc: "movement1 visual.png"
+
+    /* Segment A: full setup instructions, spoken at session start and
+       replayed between sets so the position gets rebuilt each time. */
+    setupScript:
+      "Set up facing your surface. " +
+      "Place the block under your left foot. " +
+      "Step your right foot forward. " +
+      "Round your back, hands on the surface. " +
+      "Shift your left hip back, point your zipper toward your left big toe. " +
+      "Feel that stretch in your outer left hip. " +
+      "Keep most of your weight on your left mid foot and heel. " +
+      "Watch that you do not lose that hip shift or put too much weight on your right leg. " +
+      "Now further round your back and place your forearms down. " +
+      "Do not collapse your chest toward the table. " +
+      "Press your elbows and forearms down into the surface to push your spine away from it. " +
+      "Feel your shoulder blades spread apart.",
+
+    /* Segment C: rest and completion */
+    restScript: "Set complete. Rest for 30 seconds.",
+    completeScript: "All sets complete. Great job.",
+    celebrationText: "You crushed all 4 sets. Your body thanks you.",
+
+    /* Segment B: the phases of one set. A single unlabeled phase keeps
+       this movement's behaviour byte-for-byte identical to before. */
+    phases: [
+      {
+        label: null,
+        breaths: 4,
+        introScript: null,
+        breathIntro: (set, breath) =>
+          `Hold this position. Prepare for set ${set}, breath ${breath}.`,
+        inhaleScript: "In through your nose. Direct the air between your shoulder blades.",
+        inhaleText: "Inhale... send the air into the space between your shoulder blades to fill the back of your chest wall.",
+        exhaleScript: "And out through your mouth.",
+        exhaleText: "Exhale slowly through your mouth...",
+        breathDoneScript: "Breath complete. Maintain that hip position and keep pressing your forearms down."
+      }
+    ]
+  },
+
+  /* ------------------------------------------------------------
+     MOVEMENT 2 — PRI Wall Supported Squat with Alternating
+     Respiratory Trunk Rotation. For Standing Left Gluteus Medius.
+     Two phases per set, with OPPOSITE reach timing:
+       right arm reaches further on the EXHALE,
+       left arm reaches further on the INHALE.
+     ------------------------------------------------------------ */
+  wallSupportedSquat: {
+    tabLabel: "Wall Supported<br>Squat",
+    title: "PRI Wall Supported Squat with Alternating Respiratory Trunk Rotation",
+    subtitle: "For Standing Left Gluteus Medius",
+    imageSrc: "movement2 visual.png",
+    imageAlt: "PRI Wall Supported Squat with Alternating Respiratory Trunk Rotation demonstration",
+
+    totalSets: 5,
+    inhaleSeconds: 5,
+    exhaleSeconds: 7,
+    restSeconds: 45,
+
+    steps: [
+      "Stand with your heels 7-10 inches away from the wall.",
+      "Place a 4-6 inch ball between your knees.",
+      "Place your bottom on the wall and slide down by slightly bending your knees.",
+      "Round out your back as you perform a pelvic tilt so that your low back is flat on the wall.",
+      "Shift your left hip back. Your left knee will be slightly behind your right, and you will feel your left outside hip (buttock), front of your left thigh and left inner thigh engage.",
+      "Maintaining the above position, reach forward and across the midline of your body with your right hand.",
+      "Inhale through your nose and as you exhale through your mouth, reach further with your right arm. Repeat this breathing sequence for a total of 3 deep breaths in through your nose and out through your mouth, reaching a little further with your right arm each time you exhale.",
+      "Now maintaining the above position (left hip shifted back), reach forward and across the midline of your body with your left hand.",
+      "As you inhale through your nose, reach further with your left arm. Exhale and maintain the reach. Repeat this breathing sequence for a total of 3 deep breaths, in through your nose and out through your mouth, reaching a little further with your left arm each time you inhale. Attempt to fill or expand your left upper back as you inhale.",
+      "Slowly stand up by pushing through your heels, keeping your lower back flat on the wall.",
+      "Relax and repeat 4 more times."
+    ],
+
+    setupScript:
+      "Set up with your heels seven to ten inches away from the wall. " +
+      "Place a four to six inch ball between your knees. " +
+      "Put your bottom on the wall and slide down by slightly bending your knees. " +
+      "Round out your back and perform a pelvic tilt so your low back is flat against the wall. " +
+      "Now shift your left hip back. Your left knee will sit slightly behind your right. " +
+      "You should feel your left outside hip, the front of your left thigh, and your left inner thigh engage. " +
+      "Squeeze the ball gently and hold that position.",
+
+    restScript:
+      "Set complete. Slowly stand up by pushing through your heels, " +
+      "keeping your lower back flat on the wall. Rest for forty five seconds.",
+    completeScript: "All five sets complete. Great job.",
+    celebrationText: "You crushed all 5 sets. Your body thanks you.",
+
+    phases: [
+      {
+        /* Phase 1 — right arm. The reach deepens on the EXHALE. */
+        label: "Right arm reach",
+        breaths: 3,
+        introScript:
+          "Maintaining that position, reach forward and across the midline " +
+          "of your body with your right hand.",
+        breathIntro: (set, breath) =>
+          `Set ${set}. Right arm reach, breath ${breath}.`,
+        inhaleScript: "In through your nose.",
+        inhaleText: "Inhale through your nose... hold the reach.",
+        exhaleScript: "And out through your mouth. Reach further with your right arm.",
+        exhaleText: "Exhale... reach a little further with your right arm.",
+        breathDoneScript: "Good. Keep your left hip shifted back."
+      },
+      {
+        /* Phase 2 — left arm. The reach deepens on the INHALE instead. */
+        label: "Left arm reach",
+        breaths: 3,
+        introScript:
+          "Now switch. Keep your left hip shifted back and reach forward " +
+          "across the midline of your body with your left hand.",
+        breathIntro: (set, breath) =>
+          `Set ${set}. Left arm reach, breath ${breath}.`,
+        inhaleScript: "In through your nose. Reach further with your left arm.",
+        inhaleText: "Inhale... reach further with your left arm and fill your left upper back.",
+        exhaleScript: "And out through your mouth. Maintain that reach.",
+        exhaleText: "Exhale slowly... maintain the reach.",
+        breathDoneScript: "Good. Stay low and keep that left hip back."
+      }
+    ]
   }
 };
 
-/* ==============================================================
-   PHASE 3: AUDIO SCRIPT DEFINITIONS
-   Precise cue strings for Web Speech API synthesis.
-   ============================================================== */
-const AUDIO_SCRIPTS = {
-  /* Segment A: Full setup instructions spoken once at session start */
-  setup:
-    "Set up facing your surface. " +
-    "Place the block under your left foot. " +
-    "Step your right foot forward. " +
-    "Round your back, hands on the surface. " +
-    "Shift your left hip back, point your zipper toward your left big toe. " +
-    "Feel that stretch in your outer left hip. " +
-    "Keep most of your weight on your left mid foot and heel. " +
-    "Watch that you do not lose that hip shift or put too much weight on your right leg. " +
-    "Now further round your back and place your forearms down.",
+/* Tab order, and the exercise the app opens on. */
+const EXERCISE_ORDER = ["standingLeftAFIR", "wallSupportedSquat"];
+let activeKey = EXERCISE_ORDER[0];
 
-  /* Segment B: Called per breath with dynamic set/breath numbers */
-  breathIntro: (set, breath) =>
-    `Hold this position. Prepare for set ${set}, breath ${breath}.`,
-  inhale: "In through your nose.",
-  inhaleFill: "Feel the back of your chest wall fill with air.",
-  exhale: "And out through your mouth.",
-  breathDone: "Breath complete. Maintain that hip position.",
+/** The exercise config the state machine is currently driving. */
+function active() {
+  return EXERCISES[activeKey];
+}
 
-  /* Segment C: Rest and completion */
-  restStart: "Set complete. Rest for 30 seconds.",
-  complete: "All sets complete. Great job."
-};
+/** The phase object for the current position inside a set. */
+function activePhase() {
+  return active().phases[currentPhase];
+}
 
 /* ==============================================================
-   PHASE 2: STATE MACHINE
+   STATE MACHINE
    States: IDLE -> SETUP -> BREATHE -> REST -> (loop) -> COMPLETE
+   Within a set, BREATHE walks the exercise's phases in order:
+     phase 0 breaths -> phase 1 breaths -> ... -> REST
    ============================================================== */
-
-/* ---- Configuration constants ---- */
-const TOTAL_SETS = 4;
-const BREATHS_PER_SET = 4;
-const INHALE_SECONDS = 5;
-const EXHALE_SECONDS = 7;
-const REST_SECONDS = 30;
 
 /* ---- State enum ---- */
 const STATE = {
@@ -480,15 +709,30 @@ const STATE = {
 /* ---- Application state ---- */
 let currentState = STATE.IDLE;
 let currentSet = 0;
+let currentPhase = 0;
 let currentBreath = 0;
 let restRemaining = 0;
 let isPaused = false;
 let restIntervalId = null;
 let breathTimeoutId = null;
 
+/* A run token. Every async chain captures the token it started under and
+   bails the moment the token changes. Switching tabs or pressing Start
+   bumps the token, which cleanly abandons any in-flight chain — timers
+   and speech can be cancelled, but a Promise already awaited cannot, so
+   the token is what actually stops an orphaned set from marching on. */
+let runToken = 0;
+
+/** True when the chain that owns `token` should stop: superseded or paused. */
+function aborted(token) {
+  return token !== runToken || isPaused;
+}
+
 /* ---- DOM references ---- */
 const stateDisplay = document.getElementById("stateDisplay");
 const setDisplay = document.getElementById("setDisplay");
+const phaseRow = document.getElementById("phaseRow");
+const phaseDisplay = document.getElementById("phaseDisplay");
 const breathDisplay = document.getElementById("breathDisplay");
 const restDisplay = document.getElementById("restDisplay");
 const cueDisplay = document.getElementById("cueDisplay");
@@ -496,13 +740,17 @@ const startPauseBtn = document.getElementById("startPauseBtn");
 const refBtn = document.getElementById("refBtn");
 const modalOverlay = document.getElementById("modalOverlay");
 const modalClose = document.getElementById("modalClose");
+const refImage = document.getElementById("refImage");
+const refFallback = document.getElementById("refFallback");
+const focusNote = document.getElementById("focusNote");
+const focusNoteText = document.getElementById("focusNoteText");
 const errorBanner = document.getElementById("errorBanner");
 const breathVisual = document.getElementById("breathVisual");
 const breathFill = document.getElementById("breathFill");
 const exerciseTitle = document.getElementById("exerciseTitle");
-
-/* Set the page title from exercise data */
-exerciseTitle.textContent = EXERCISES.standingSupportedPassiveLeftAFIR.title;
+const exerciseSubtitle = document.getElementById("exerciseSubtitle");
+const tabBar = document.getElementById("tabBar");
+const celebrationSubtitle = document.getElementById("celebrationSubtitle");
 
 /* ==============================================================
    WEB SPEECH API: ERROR HANDLING AND SYNTHESIS
@@ -570,15 +818,30 @@ function setStateUI(state) {
 }
 
 function updateSetUI() {
-  setDisplay.textContent = `${currentSet} of ${TOTAL_SETS}`;
+  setDisplay.textContent = `${currentSet} of ${active().totalSets}`;
+}
+
+/** The Phase row only exists for multi-phase movements. */
+function updatePhaseUI() {
+  const phases = active().phases;
+  if (phases.length < 2) {
+    phaseRow.classList.add("hidden");
+    return;
+  }
+  phaseRow.classList.remove("hidden");
+  const label = phases[currentPhase] ? phases[currentPhase].label : null;
+  phaseDisplay.textContent =
+    currentState === STATE.IDLE || currentState === STATE.COMPLETE
+      ? "—"
+      : `${label} (${currentPhase + 1} of ${phases.length})`;
 }
 
 function updateBreathUI() {
-  breathDisplay.textContent = `${currentBreath} of ${BREATHS_PER_SET}`;
+  breathDisplay.textContent = `${currentBreath} of ${activePhase().breaths}`;
 }
 
 function updateRestUI(seconds) {
-  restDisplay.textContent = seconds > 0 ? `${seconds}s` : "\u2014";
+  restDisplay.textContent = seconds > 0 ? `${seconds}s` : "—";
 }
 
 function setCue(text) {
@@ -611,7 +874,7 @@ function hideBreathBar() {
 function cancelAllTimers() {
   if (restIntervalId) { clearInterval(restIntervalId); restIntervalId = null; }
   if (breathTimeoutId) { clearTimeout(breathTimeoutId); breathTimeoutId = null; }
-  window.speechSynthesis.cancel();
+  if (speechSupported) window.speechSynthesis.cancel();
   hideBreathBar();
 }
 
@@ -631,108 +894,159 @@ function timedPause(ms) {
 
 /* ==============================================================
    STATE MACHINE TRANSITIONS
-   Each state function is async. The machine flows linearly:
-     enterSetup -> enterBreathe (loops breaths) -> enterRest (loops sets) -> enterComplete
+   Each state function is async and carries the run token it began
+   under. The machine flows:
+     startSession -> enterSetup -> enterPhase -> enterBreathe (loops)
+       -> next phase, or enterRest (loops sets), or enterComplete
    ============================================================== */
 
 /**
- * SETUP STATE
- * Speaks the full setup script (Segment A).
- * Then automatically transitions to the first breathing cycle.
+ * Begin a fresh session for the active exercise.
+ * Counter resets live here — NOT in enterSetup — because enterSetup is
+ * replayed between sets and must not rewind the set count.
  */
-async function enterSetup() {
-  if (isPaused) return;
-  setStateUI(STATE.SETUP);
+function startSession() {
+  runToken++;
+  isPaused = false;
   currentSet = 1;
+  currentPhase = 0;
   currentBreath = 0;
   updateSetUI();
+  updatePhaseUI();
   updateBreathUI();
   updateRestUI(0);
+  enterSetup(runToken);
+}
 
-  await speak(AUDIO_SCRIPTS.setup);
+/**
+ * SETUP STATE
+ * Speaks the full setup script. Runs once at the start of the session
+ * and again after every rest so the position is rebuilt each set.
+ * Transitions to the first phase of the current set.
+ */
+async function enterSetup(token) {
+  if (aborted(token)) return;
+  setStateUI(STATE.SETUP);
+  updatePhaseUI();
+
+  await speak(active().setupScript);
+  if (aborted(token)) return;
 
   /* Small pause before the first breath cycle */
-  if (isPaused) return;
   await timedPause(1500);
+  if (aborted(token)) return;
 
   /* Transition: SETUP -> BREATHE */
-  if (!isPaused) enterBreathe();
+  enterPhase(token);
+}
+
+/**
+ * PHASE ENTRY
+ * Speaks the phase's positioning cue (the arm switch, for movement 2)
+ * before handing off to the breath loop. Single-phase movements have
+ * no intro script and fall straight through.
+ */
+async function enterPhase(token) {
+  if (aborted(token)) return;
+  setStateUI(STATE.BREATHE);
+  currentBreath = 0;
+  updatePhaseUI();
+  updateBreathUI();
+
+  const phase = activePhase();
+  if (phase.introScript) {
+    await speak(phase.introScript);
+    if (aborted(token)) return;
+    await timedPause(1000);
+    if (aborted(token)) return;
+  }
+
+  enterBreathe(token);
 }
 
 /**
  * BREATHE STATE
- * Runs a single breath: inhale cue -> 5s hold -> exhale cue -> 7s hold.
- * Increments the breath counter. After BREATHS_PER_SET, transitions to REST.
+ * Runs a single breath: inhale cue -> inhale hold -> exhale cue -> exhale hold.
+ * After the phase's breath quota, advances to the next phase, then REST.
  */
-async function enterBreathe() {
-  if (isPaused) return;
+async function enterBreathe(token) {
+  if (aborted(token)) return;
+  const ex = active();
+  const phase = activePhase();
+
   setStateUI(STATE.BREATHE);
   currentBreath++;
+  updatePhaseUI();
   updateBreathUI();
 
   /* Announce the upcoming breath */
-  await speak(AUDIO_SCRIPTS.breathIntro(currentSet, currentBreath));
-  if (isPaused) return;
+  await speak(phase.breathIntro(currentSet, currentBreath));
+  if (aborted(token)) return;
 
   /* ---- INHALE phase ---- */
-  await speak(AUDIO_SCRIPTS.inhale);
-  if (isPaused) return;
+  await speak(phase.inhaleScript);
+  if (aborted(token)) return;
 
-  /* Show the inhale progress bar for 5 seconds */
-  showBreathBar("inhale", INHALE_SECONDS * 1000);
-  setCue("Inhale... feel the back of your chest wall fill with air.");
-  await timedPause(INHALE_SECONDS * 1000);
-  if (isPaused) return;
+  showBreathBar("inhale", ex.inhaleSeconds * 1000);
+  setCue(phase.inhaleText);
+  await timedPause(ex.inhaleSeconds * 1000);
+  if (aborted(token)) return;
   hideBreathBar();
 
   /* ---- EXHALE phase ---- */
-  await speak(AUDIO_SCRIPTS.exhale);
-  if (isPaused) return;
+  await speak(phase.exhaleScript);
+  if (aborted(token)) return;
 
-  /* Show the exhale progress bar for 7 seconds */
-  showBreathBar("exhale", EXHALE_SECONDS * 1000);
-  setCue("Exhale slowly through your mouth...");
-  await timedPause(EXHALE_SECONDS * 1000);
-  if (isPaused) return;
+  showBreathBar("exhale", ex.exhaleSeconds * 1000);
+  setCue(phase.exhaleText);
+  await timedPause(ex.exhaleSeconds * 1000);
+  if (aborted(token)) return;
   hideBreathBar();
 
   /* Post breath confirmation */
-  await speak(AUDIO_SCRIPTS.breathDone);
-  if (isPaused) return;
+  await speak(phase.breathDoneScript);
+  if (aborted(token)) return;
 
   /* ---- Decide next transition ---- */
-  if (currentBreath < BREATHS_PER_SET) {
-    /* More breaths remain in this set. Loop back. */
+  if (currentBreath < phase.breaths) {
+    /* More breaths remain in this phase. Loop back. */
     await timedPause(1000);
-    if (!isPaused) enterBreathe();
+    if (aborted(token)) return;
+    enterBreathe(token);
+  } else if (currentPhase < ex.phases.length - 1) {
+    /* Phase done, but the set has another phase (the arm switch). */
+    currentPhase++;
+    await timedPause(500);
+    if (aborted(token)) return;
+    enterPhase(token);
+  } else if (currentSet < ex.totalSets) {
+    /* Whole set done. Transition: BREATHE -> REST */
+    enterRest(token);
   } else {
-    /* All breaths done for this set. Transition: BREATHE -> REST or COMPLETE */
-    if (currentSet < TOTAL_SETS) {
-      enterRest();
-    } else {
-      enterComplete();
-    }
+    enterComplete(token);
   }
 }
 
 /**
  * REST STATE
- * Speaks the rest cue. Runs a 30 second visible countdown.
- * After the countdown, increments the set and loops back to BREATHE.
+ * Speaks the rest cue, then runs a visible countdown of the exercise's
+ * rest length. Afterwards increments the set and replays SETUP.
  */
-async function enterRest() {
-  if (isPaused) return;
+async function enterRest(token) {
+  if (aborted(token)) return;
+  const ex = active();
   setStateUI(STATE.REST);
-  restRemaining = REST_SECONDS;
+  restRemaining = ex.restSeconds;
   updateRestUI(restRemaining);
+  updatePhaseUI();
 
-  await speak(AUDIO_SCRIPTS.restStart);
-  if (isPaused) return;
+  await speak(ex.restScript);
+  if (aborted(token)) return;
 
   /* Start the countdown interval (ticks every second) */
   await new Promise((resolve) => {
     restIntervalId = setInterval(() => {
-      if (isPaused) {
+      if (aborted(token)) {
         clearInterval(restIntervalId);
         restIntervalId = null;
         resolve();
@@ -750,23 +1064,18 @@ async function enterRest() {
     }, 1000);
   });
 
-  if (isPaused) return;
+  if (aborted(token)) return;
   updateRestUI(0);
 
   /* Transition: REST -> SETUP (replay) -> BREATHE (next set) */
   currentSet++;
+  currentPhase = 0;
   currentBreath = 0;
   updateSetUI();
+  updatePhaseUI();
   updateBreathUI();
 
-  /* Replay the full setup instructions so the user resets their position */
-  if (!isPaused) {
-    setStateUI(STATE.SETUP);
-    await speak(AUDIO_SCRIPTS.setup);
-    if (isPaused) return;
-    await timedPause(1500);
-    if (!isPaused) enterBreathe();
-  }
+  enterSetup(token);
 }
 
 /**
@@ -775,19 +1084,22 @@ async function enterRest() {
  * Launches confetti, shows the celebration overlay, speaks the completion cue.
  * The overlay fades out after a few seconds and resets the UI.
  */
-async function enterComplete() {
+async function enterComplete(token) {
+  if (token !== runToken) return;
   setStateUI(STATE.COMPLETE);
   updateRestUI(0);
+  updatePhaseUI();
 
   /* Fire confetti and show the celebration card */
   launchConfetti();
   showCelebration();
 
-  await speak(AUDIO_SCRIPTS.complete);
-  if (isPaused) return;
+  await speak(active().completeScript);
+  if (token !== runToken) return;
 
   /* Hold the celebration for a moment so it sinks in */
   await timedPause(4000);
+  if (token !== runToken) return;
 
   /* Fade out the celebration overlay */
   hideCelebration();
@@ -905,15 +1217,116 @@ function launchConfetti() {
 }
 
 /* ==============================================================
+   TAB BAR AND EXERCISE SWITCHING
+   Tabs are generated from EXERCISE_ORDER so the markup never has to
+   be kept in sync by hand. Switching tabs abandons any running
+   session outright: bumping the run token orphans the in-flight
+   async chain, and resetExercise clears timers, speech and counters.
+   ============================================================== */
+
+function buildTabs() {
+  tabBar.innerHTML = "";
+  EXERCISE_ORDER.forEach((key) => {
+    const btn = document.createElement("button");
+    btn.className = "tab" + (key === activeKey ? " active" : "");
+    btn.type = "button";
+    btn.dataset.key = key;
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", key === activeKey ? "true" : "false");
+    btn.innerHTML = EXERCISES[key].tabLabel;
+    btn.addEventListener("click", () => selectExercise(key));
+    tabBar.appendChild(btn);
+  });
+}
+
+function syncTabState() {
+  tabBar.querySelectorAll(".tab").forEach((btn) => {
+    const isActive = btn.dataset.key === activeKey;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+}
+
+/** Stop everything and return the UI to a clean Idle state. */
+function resetSession() {
+  runToken++;
+  isPaused = false;
+  cancelAllTimers();
+  currentState = STATE.IDLE;
+  currentSet = 0;
+  currentPhase = 0;
+  currentBreath = 0;
+  hideCelebration();
+  setStateUI(STATE.IDLE);
+  startPauseBtn.textContent = "Start";
+}
+
+/** Paint every exercise-specific piece of the UI. */
+function renderExercise() {
+  const ex = active();
+
+  exerciseTitle.textContent = ex.title;
+  document.title = "PRI Trainer — " + ex.title;
+
+  if (ex.subtitle) {
+    exerciseSubtitle.textContent = ex.subtitle;
+    exerciseSubtitle.classList.remove("hidden");
+  } else {
+    exerciseSubtitle.textContent = "";
+    exerciseSubtitle.classList.add("hidden");
+  }
+
+  celebrationSubtitle.textContent = ex.celebrationText;
+
+  /* Focus note is optional \u2014 only movements that have one show the panel. */
+  if (ex.focusNote) {
+    focusNoteText.textContent = ex.focusNote;
+    focusNote.classList.remove("hidden");
+  } else {
+    focusNoteText.textContent = "";
+    focusNote.classList.add("hidden");
+  }
+
+  /* Point the reference modal at this movement's sheet. The fallback
+     message is shown by the image's error handler, wired up below. */
+  refFallback.classList.remove("visible");
+  refImage.classList.remove("hidden");
+  refImage.alt = ex.imageAlt;
+  refImage.src = ex.imageSrc;
+
+  updateSetUI();
+  updatePhaseUI();
+  updateBreathUI();
+  updateRestUI(0);
+  setCue("Press Start to begin your session.");
+}
+
+function selectExercise(key) {
+  if (key === activeKey) return;
+  resetSession();
+  activeKey = key;
+  syncTabState();
+  renderExercise();
+}
+
+/* If a movement image is missing from the project root, say so in the
+   modal rather than showing a broken image icon. */
+refImage.addEventListener("error", () => {
+  refImage.classList.add("hidden");
+  refFallback.textContent =
+    `Place "${active().imageSrc}" in the project root to see the visual reference.`;
+  refFallback.classList.add("visible");
+});
+
+/* ==============================================================
    BUTTON HANDLERS
    ============================================================== */
 
 startPauseBtn.addEventListener("click", () => {
   if (currentState === STATE.IDLE || currentState === STATE.COMPLETE) {
     /* Fresh start */
-    isPaused = false;
     startPauseBtn.textContent = "Pause";
-    enterSetup();
+    startSession();
   } else if (isPaused) {
     /* Resume from pause */
     isPaused = false;
@@ -922,13 +1335,18 @@ startPauseBtn.addEventListener("click", () => {
 
     /* Re-enter the current state at the right point */
     if (currentState === STATE.SETUP) {
-      enterSetup();
+      enterSetup(runToken);
     } else if (currentState === STATE.BREATHE) {
-      /* Restart the current breath */
-      currentBreath--;
-      enterBreathe();
+      if (currentBreath === 0) {
+        /* Paused during the phase intro — replay the positioning cue */
+        enterPhase(runToken);
+      } else {
+        /* Restart the breath that was interrupted */
+        currentBreath--;
+        enterBreathe(runToken);
+      }
     } else if (currentState === STATE.REST) {
-      enterRest();
+      enterRest(runToken);
     }
   } else {
     /* Pause the session */
@@ -964,11 +1382,16 @@ document.addEventListener("keydown", (e) => {
 
 /* ==============================================================
    INITIALIZATION
-   Check speech support on page load. Size confetti canvas.
+   Check speech support on load. Build tabs, paint the default
+   exercise, and size the confetti canvas.
    ============================================================== */
 checkSpeechSupport();
+buildTabs();
+renderExercise();
+setStateUI(STATE.IDLE);
 resizeConfettiCanvas();
 window.addEventListener("resize", resizeConfettiCanvas);
+
 </script>
 
 </body>
