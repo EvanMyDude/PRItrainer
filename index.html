@@ -332,6 +332,7 @@
        ============================================================ */
     .tabs {
       display: flex;
+      flex-wrap: wrap;
       gap: 0.35rem;
       background: var(--surface);
       padding: 0.35rem;
@@ -339,7 +340,9 @@
     }
 
     .tab {
-      flex: 1;
+      /* 30% basis puts three tabs per row at the 480px app width and lets
+         the rest wrap onto a second row rather than crushing every tab. */
+      flex: 1 1 30%;
       padding: 0.7rem 0.4rem;
       border: none;
       background: transparent;
@@ -417,6 +420,26 @@
     .modal-fallback.visible { display: block; }
 
     /* ============================================================
+       REFERENCE STEP LIST
+       The written form of what the app speaks. The global reset
+       zeroes list padding, so the marker gutter is restored here.
+       ============================================================ */
+    .ref-steps {
+      margin-top: 1.25rem;
+      padding-left: 1.4rem;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: var(--text-dim);
+    }
+
+    .ref-steps li + li { margin-top: 0.6rem; }
+
+    .ref-steps li::marker {
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    /* ============================================================
        RESPONSIVE
        ============================================================ */
     @media (max-width: 400px) {
@@ -456,7 +479,7 @@
         <span class="status-value" id="phaseDisplay">&mdash;</span>
       </div>
       <div class="status-row">
-        <span class="status-label">Breath</span>
+        <span class="status-label" id="breathLabel">Breath</span>
         <span class="status-value" id="breathDisplay">0 of 4</span>
       </div>
       <div class="status-row">
@@ -490,6 +513,7 @@
       </div>
       <img id="refImage" alt="Exercise visual reference" />
       <p class="modal-fallback" id="refFallback"></p>
+      <ol class="ref-steps" id="refSteps"></ol>
     </div>
   </div>
 
@@ -600,7 +624,7 @@ const EXERCISES = {
        left arm reaches further on the INHALE.
      ------------------------------------------------------------ */
   wallSupportedSquat: {
-    tabLabel: "Wall Supported<br>Squat",
+    tabLabel: "Wall<br>Squat",
     title: "PRI Wall Supported Squat with Alternating Respiratory Trunk Rotation",
     subtitle: "For Standing Left Gluteus Medius",
     imageSrc: "movement2 visual.png",
@@ -672,11 +696,250 @@ const EXERCISES = {
         breathDoneScript: "Good. Stay low."
       }
     ]
+  },
+
+  /* ------------------------------------------------------------
+     MOVEMENT 3 — Wall and Chair Supported IO/TA
+     A flat movement, but the breath halves are not interchangeable:
+     the exhale turns the outer abdominals ON by pressing into the
+     chair, and the inhale's whole job is to not let them switch off.
+     ------------------------------------------------------------ */
+  wallChairIOTA: {
+    tabLabel: "Wall + Chair<br>IO/TA",
+    title: "Wall and Chair Supported IO/TA",
+    subtitle: "",
+    imageSrc: "movement3 visual.png",
+    imageAlt: "Wall and Chair Supported IO/TA demonstration",
+
+    focusNote:
+      "The order here is the whole exercise. Exhale and press your hands into the chair to turn " +
+      "your outer abdominals on, then inhale without letting them switch off. Do not pull away " +
+      "from the chair when you relax your hands, and do not let your ribs flare as you breathe in. " +
+      "Your lower back stays flat on the wall for the entire set — only your upper back is off it.",
+
+    totalSets: 5,
+    inhaleSeconds: 5,
+    exhaleSeconds: 7,
+    restSeconds: 45,
+
+    /* The press is the work, so the cycle runs exhale first. The sheet's
+       one-off priming inhale lives at the end of the setup script. */
+    exhaleFirst: true,
+
+    steps: [
+      "Stand against a wall with a ball between your knees and your feet 7-10 inches from the wall. Place your hands on a chair in front of you and look straight ahead.",
+      "Round out your back as you perform a pelvic tilt so that your lower back (mid-back and down) is flat on the wall. Your upper back will be off the wall.",
+      "Inhale through your nose.",
+      "Exhale through your mouth and gently press your hands into the chair. You should feel the muscles on the front of your thighs and outer abdominals engage.",
+      "Inhale through your nose (and relax your hands) keeping your abs on — don't pull away from the chair. You should feel your upper back expand as you take a breath of air in.",
+      "Continue this sequence for a total of 4-5 breaths, in through your nose and out through your mouth.",
+      "On the final exhale, slowly stand up by pushing through your heels, keeping your lower back flat on the wall.",
+      "Relax and repeat 4 more times."
+    ],
+
+    setupScript:
+      "Stand against a wall with a ball between your knees and your feet seven to ten inches from the wall. " +
+      "Place your hands on a chair in front of you and look straight ahead. " +
+      "Round out your back as you perform a pelvic tilt, so your lower back, mid back and down, is flat on the wall. " +
+      "Your upper back will be off the wall. " +
+      "Now take an easy breath in through your nose.",
+
+    restScript:
+      "Set complete. Slowly stand up by pushing through your heels, " +
+      "keeping your lower back flat on the wall. Rest for forty five seconds.",
+    completeScript: "All five sets complete. Great job.",
+    celebrationText: "You crushed all 5 sets. Your body thanks you.",
+
+    phases: [
+      {
+        label: null,
+        breaths: 4,
+        introScript: null,
+        breathIntro: (set, breath) => `Set ${set}, breath ${breath}.`,
+        inhaleScript: "In through your nose. Relax your hands, but keep your abs on.",
+        inhaleText: "Inhale... let your upper back expand. Keep your abs on — don't pull away from the chair.",
+        exhaleScript: "Out through your mouth. Gently press your hands into the chair.",
+        exhaleText: "Exhale... press your hands into the chair. Feel the front of your thighs and your outer abs engage.",
+        breathDoneScript: "Good."
+      }
+    ]
+  },
+
+  /* ------------------------------------------------------------
+     MOVEMENT 4 — 90-90 Supported Alternating Leg Lift
+     The one rep-based movement. Each "breath" is one rep, led by the
+     exhale, at a much shorter 3s/3s tempo, with the cue spoken over
+     the hold. All four of those are per-phase opt-ins on the engine.
+     ------------------------------------------------------------ */
+  ninetyNinetyLegLift: {
+    tabLabel: "90-90<br>Leg Lift",
+    title: "90-90 Supported Alternating Leg Lift",
+    subtitle: "PRI: Reciprocal Unilateral Supine Wall Leg Lift",
+    imageSrc: "movement4 visual.jpg",
+    imageAlt: "90-90 Supported Alternating Leg Lift demonstration",
+
+    focusNote:
+      "Dig down with your heels — do not press your feet flat into the wall. Your tailbone stays " +
+      "slightly lifted off the mat and your back stays flat on it for the whole set. The working leg " +
+      "is the one still ON the wall: when your right foot comes off, the muscles you should feel are " +
+      "the back of your LEFT thigh. When the lifted foot returns, only the toes touch.",
+
+    totalSets: 3,
+    inhaleSeconds: 3,
+    exhaleSeconds: 3,
+    restSeconds: 45,
+
+    /* The one rep-based movement: each cycle is a leg lift rather than a
+       held breath. The foot leaves the wall on the way out, the count runs
+       in reps, and the cue overlaps its timer instead of preceding it. */
+    exhaleFirst: true,
+    overlapSpeech: true,
+    unitLabel: "Rep",
+
+    steps: [
+      "Lie on your back with your knees and hips bent at a 90-degree angle and feet on the wall.",
+      "Place a 3-4 inch bolster under your tailbone and place both hands on your ribs.",
+      "Inhale through your nose and exhale through your mouth, performing a pelvic tilt so that your tailbone is raised slightly off the mat. Keep your back flat on the mat. Do not press your feet flat into the wall — instead dig down with your heels.",
+      "Take your right foot off the wall as you maintain contact to the wall with your left. You should feel the muscles on the back of your left thigh engage. Continue going on and off the wall with your right foot 10 times, allowing only your toes to touch. Inhale through your nose and exhale through your mouth while performing.",
+      "Return your right foot to the wall and repeat with the left leg.",
+      "Continue the sequence until you have completed 2-3 sets of 10 with each foot."
+    ],
+
+    setupScript:
+      "Lie on your back with your knees and hips bent at a ninety degree angle, and your feet on the wall. " +
+      "Place a three to four inch bolster under your tailbone, and place both hands on your ribs. " +
+      "Inhale through your nose, and as you exhale through your mouth, perform a pelvic tilt so your tailbone " +
+      "is raised slightly off the mat. Keep your back flat on the mat. " +
+      "Do not press your feet flat into the wall. Dig down with your heels.",
+
+    restScript: "Set complete. Rest both feet on the wall. Rest for forty five seconds.",
+    completeScript: "All three sets complete. Great job.",
+    celebrationText: "You crushed all 3 sets — 60 leg lifts. Your body thanks you.",
+
+    phases: [
+      {
+        /* Phase 1 — right foot lifts, left foot stays on and does the work. */
+        label: "Right foot lifts",
+        breaths: 10,
+        introScript:
+          "Ten reps with your right foot. Breathe in through your nose and out through your mouth " +
+          "the whole way through. Keep digging down with your left heel. " +
+          "Every time your right foot comes off the wall, you should feel the back of your left thigh engage.",
+        breathIntro: (set, rep) => `Rep ${rep}.`,
+        exhaleScript: "Exhale. Right foot off.",
+        exhaleText: "Exhale... right foot off the wall. Feel the back of your left thigh.",
+        inhaleScript: "Inhale. Toes back down.",
+        inhaleText: "Inhale... right toes back down. Toes only.",
+        breathDoneScript: null
+      },
+      {
+        /* Phase 2 — mirrored: left foot lifts, right foot does the work. */
+        label: "Left foot lifts",
+        breaths: 10,
+        introScript:
+          "Now switch. Return your right foot to the wall, and take ten reps with your left. " +
+          "Same breathing, in through your nose and out through your mouth. " +
+          "Keep digging down with your right heel.",
+        breathIntro: (set, rep) => `Rep ${rep}.`,
+        exhaleScript: "Exhale. Left foot off.",
+        exhaleText: "Exhale... left foot off the wall. Feel the back of your right thigh.",
+        inhaleScript: "Inhale. Toes back down.",
+        inhaleText: "Inhale... left toes back down. Toes only.",
+        breathDoneScript: null
+      }
+    ]
+  },
+
+  /* ------------------------------------------------------------
+     MOVEMENT 5 — Modified All Four Belly Lift
+     Structurally a twin of the wall supported squat: two phases per
+     set, alternating sides, four held breaths each. No engine
+     features needed.
+     ------------------------------------------------------------ */
+  allFourBellyLift: {
+    tabLabel: "All Four<br>Belly Lift",
+    title: "Modified All Four Belly Lift",
+    subtitle: "PRI: Modified All-Four Belly Lift",
+    imageSrc: "movement5 visual.jpg",
+    imageAlt: "Modified All Four Belly Lift demonstration",
+
+    focusNote:
+      "Don't let your trunk turn or twist when you lift a hand — a dropping shoulder or rotating " +
+      "hips is the give-away. Keep your spine maximally rounded, your bottom tucked under, and your " +
+      "nose over your fingertips the whole time. The abdominal wall you should feel is always the " +
+      "OPPOSITE side from the lifted hand: left hand up engages your right abs, right hand up " +
+      "engages your left.",
+
+    totalSets: 5,
+    inhaleSeconds: 5,
+    exhaleSeconds: 7,
+    restSeconds: 45,
+
+    steps: [
+      "Position yourself on your hands and knees with your back rounded.",
+      "Maximally round your spine by arching your back upward, as you roll your pelvis back so that your bottom tucks under you.",
+      "Shift your body weight forward so your nose is over your fingertips. You should feel your outer abdominals.",
+      "Raise your left hand off the floor as you maintain a rounded trunk position. Don't let your trunk turn or twist when you lift up your hand. You should feel your right abdominal wall engage when you pick your left hand up.",
+      "Hold this position while you take 4-5 deep breaths, in through your nose and out through your mouth.",
+      "Lower your left hand to the floor and take your right hand off the floor. You should feel your left abdominal wall engage when you pick your right hand up.",
+      "Hold this position while you take 4-5 deep breaths, in through your nose and out through your mouth.",
+      "Relax and repeat both sequences 4 more times."
+    ],
+
+    setupScript:
+      "Position yourself on your hands and knees with your back rounded. " +
+      "Maximally round your spine by arching your back upward, as you roll your pelvis back " +
+      "so that your bottom tucks under you. " +
+      "Now shift your body weight forward so your nose is over your fingertips. " +
+      "You should feel your outer abdominals.",
+
+    restScript: "Set complete. Lower both hands and relax. Rest for forty five seconds.",
+    completeScript: "All five sets complete. Great job.",
+    celebrationText: "You crushed all 5 sets. Your body thanks you.",
+
+    phases: [
+      {
+        /* Phase 1 — left hand up engages the RIGHT abdominal wall. */
+        label: "Left hand lifted",
+        breaths: 4,
+        introScript:
+          "Raise your left hand off the floor as you maintain that rounded trunk position. " +
+          "Don't let your trunk turn or twist. " +
+          "You should feel your right abdominal wall engage.",
+        breathIntro: (set, breath) => `Set ${set}, left hand up, breath ${breath}.`,
+        inhaleScript: "In through your nose.",
+        inhaleText: "Inhale through your nose... keep your nose over your fingertips.",
+        exhaleScript: "Out through your mouth.",
+        exhaleText: "Exhale slowly... feel your right abdominal wall hold.",
+        breathDoneScript: "Good. No twisting."
+      },
+      {
+        /* Phase 2 — right hand up engages the LEFT abdominal wall. */
+        label: "Right hand lifted",
+        breaths: 4,
+        introScript:
+          "Now lower your left hand to the floor, and take your right hand off the floor. " +
+          "Keep that trunk rounded and square. " +
+          "You should feel your left abdominal wall engage.",
+        breathIntro: (set, breath) => `Set ${set}, right hand up, breath ${breath}.`,
+        inhaleScript: "In through your nose.",
+        inhaleText: "Inhale through your nose... stay rounded, nose over your fingertips.",
+        exhaleScript: "Out through your mouth.",
+        exhaleText: "Exhale slowly... feel your left abdominal wall hold.",
+        breathDoneScript: "Good. Stay rounded."
+      }
+    ]
   }
 };
 
 /* Tab order, and the exercise the app opens on. */
-const EXERCISE_ORDER = ["standingLeftAFIR", "wallSupportedSquat"];
+const EXERCISE_ORDER = [
+  "standingLeftAFIR",
+  "wallSupportedSquat",
+  "wallChairIOTA",
+  "ninetyNinetyLegLift",
+  "allFourBellyLift"
+];
 let activeKey = EXERCISE_ORDER[0];
 
 /** The exercise config the state machine is currently driving. */
@@ -732,6 +995,7 @@ const stateDisplay = document.getElementById("stateDisplay");
 const setDisplay = document.getElementById("setDisplay");
 const phaseRow = document.getElementById("phaseRow");
 const phaseDisplay = document.getElementById("phaseDisplay");
+const breathLabel = document.getElementById("breathLabel");
 const breathDisplay = document.getElementById("breathDisplay");
 const restDisplay = document.getElementById("restDisplay");
 const cueDisplay = document.getElementById("cueDisplay");
@@ -741,6 +1005,7 @@ const modalOverlay = document.getElementById("modalOverlay");
 const modalClose = document.getElementById("modalClose");
 const refImage = document.getElementById("refImage");
 const refFallback = document.getElementById("refFallback");
+const refSteps = document.getElementById("refSteps");
 const focusNote = document.getElementById("focusNote");
 const focusNoteText = document.getElementById("focusNoteText");
 const errorBanner = document.getElementById("errorBanner");
@@ -788,10 +1053,28 @@ function speak(text) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.92;
     utterance.pitch = 1;
-    utterance.onend = resolve;
+
+    /* Chrome can swallow an utterance queued immediately after cancel(),
+       firing neither end nor error. An awaited speak() would then hang the
+       session outright. The rep-paced movement runs that cancel-then-speak
+       pairing every few seconds, so settle on whichever lands first and let
+       a swallowed cue degrade into a slightly early one. */
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      resolve();
+    };
+    const watchdog = setTimeout(() => {
+      console.warn("[PRI Trainer] Speech never reported back; continuing.");
+      finish();
+    }, text.length * 120 + 3000);
+
+    utterance.onend = finish;
     utterance.onerror = (e) => {
       console.error("[PRI Trainer] Speech error:", e.error);
-      resolve();
+      finish();
     };
     window.speechSynthesis.speak(utterance);
   });
@@ -836,6 +1119,9 @@ function updatePhaseUI() {
 }
 
 function updateBreathUI() {
+  /* Rep-based phases relabel this row — "Rep 3 of 10" rather than
+     "Breath 3 of 10". Everything else falls back to the breath wording. */
+  breathLabel.textContent = active().unitLabel || "Breath";
   breathDisplay.textContent = `${currentBreath} of ${activePhase().breaths}`;
 }
 
@@ -884,10 +1170,13 @@ function cancelAllTimers() {
    ============================================================== */
 function timedPause(ms) {
   return new Promise((resolve) => {
-    breathTimeoutId = setTimeout(() => {
-      breathTimeoutId = null;
+    const id = setTimeout(() => {
+      /* Only clear the slot if it is still ours — a newer chain may have
+         claimed it while this timer was in flight. */
+      if (breathTimeoutId === id) breathTimeoutId = null;
       resolve();
     }, ms);
+    breathTimeoutId = id;
   });
 }
 
@@ -905,6 +1194,12 @@ function timedPause(ms) {
  * replayed between sets and must not rewind the set count.
  */
 function startSession() {
+  /* Clean up unconditionally. Starting again during the celebration would
+     otherwise leave enterComplete's pending timer to bail on the token check
+     before it reaches hideCelebration(), stranding a full-screen overlay
+     over the new session with no way to dismiss it. */
+  cancelAllTimers();
+  hideCelebration();
   runToken++;
   isPaused = false;
   currentSet = 1;
@@ -978,33 +1273,43 @@ async function enterBreathe(token) {
   updatePhaseUI();
   updateBreathUI();
 
-  /* Announce the upcoming breath */
+  /* Announce the upcoming breath or rep. */
   await speak(phase.breathIntro(currentSet, currentBreath));
   if (aborted(token)) return;
 
-  /* ---- INHALE phase ---- */
-  await speak(phase.inhaleScript);
-  if (aborted(token)) return;
+  /* The two halves of one cycle, bound up front so that every config key
+     stays a literal you can grep for. Most movements inhale first; the ones
+     whose work happens on the way out set exhaleFirst, which keeps a rep a
+     self-contained out-and-back instead of spilling into the next count. */
+  const inhale = { kind: "inhale", script: phase.inhaleScript, text: phase.inhaleText, ms: ex.inhaleSeconds * 1000 };
+  const exhale = { kind: "exhale", script: phase.exhaleScript, text: phase.exhaleText, ms: ex.exhaleSeconds * 1000 };
 
-  showBreathBar("inhale", ex.inhaleSeconds * 1000);
-  setCue(phase.inhaleText);
-  await timedPause(ex.inhaleSeconds * 1000);
-  if (aborted(token)) return;
-  hideBreathBar();
+  for (const seg of ex.exhaleFirst ? [exhale, inhale] : [inhale, exhale]) {
+    /* Rep work overlaps the cue with its timer instead of speaking it first.
+       Waiting out an utterance before each of sixty segments would add
+       minutes to the set. The rep count above is still spoken up front, so
+       this halves the spoken overhead rather than removing it. */
+    if (ex.overlapSpeech) {
+      speak(seg.script);
+    } else {
+      await speak(seg.script);
+      if (aborted(token)) return;
+    }
 
-  /* ---- EXHALE phase ---- */
-  await speak(phase.exhaleScript);
-  if (aborted(token)) return;
+    /* speak() puts the script on the cue line; replace it with the richer
+       on-screen wording. */
+    showBreathBar(seg.kind, seg.ms);
+    setCue(seg.text);
+    await timedPause(seg.ms);
+    if (aborted(token)) return;
+    hideBreathBar();
+  }
 
-  showBreathBar("exhale", ex.exhaleSeconds * 1000);
-  setCue(phase.exhaleText);
-  await timedPause(ex.exhaleSeconds * 1000);
-  if (aborted(token)) return;
-  hideBreathBar();
-
-  /* Post breath confirmation */
-  await speak(phase.breathDoneScript);
-  if (aborted(token)) return;
+  /* Post-breath confirmation. Rep phases drop it to keep the cadence tight. */
+  if (phase.breathDoneScript) {
+    await speak(phase.breathDoneScript);
+    if (aborted(token)) return;
+  }
 
   /* ---- Decide next transition ---- */
   if (currentBreath < phase.breaths) {
@@ -1290,6 +1595,14 @@ function renderExercise() {
   refImage.alt = ex.imageAlt;
   refImage.src = ex.imageSrc;
 
+  /* Written form of the spoken script, for reading between sets. */
+  refSteps.innerHTML = "";
+  ex.steps.forEach((step) => {
+    const li = document.createElement("li");
+    li.textContent = step;
+    refSteps.appendChild(li);
+  });
+
   updateSetUI();
   updatePhaseUI();
   updateBreathUI();
@@ -1324,8 +1637,13 @@ startPauseBtn.addEventListener("click", () => {
     startPauseBtn.textContent = "Pause";
     startSession();
   } else if (isPaused) {
-    /* Resume from pause */
+    /* Resume from pause. Bump the token first: aborted() is
+       `token !== runToken || isPaused`, so a chain still suspended on an
+       untracked timer or a speech event that has not landed yet would
+       otherwise find isPaused back at false, pass the check, and run on
+       alongside the chain we are about to start. */
     isPaused = false;
+    runToken++;
     startPauseBtn.textContent = "Pause";
     setCue("Resuming...");
 
